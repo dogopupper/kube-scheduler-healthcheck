@@ -1,5 +1,7 @@
-#!/bin/sh
+#!/bin/bash
 set -eu
+shopt -s expand_aliases
+
 TEST_POD_NAMESPACE="${TEST_POD_NAMESPACE:-kube-system}"
 TEST_POD_IMAGE="${TEST_POD_IMAGE:-gcr.io/google_containers/pause:3.0}"
 TEST_POD_NAME_POSTFIX="${TEST_POD_NAME_POSTFIX-'pod'}"
@@ -10,23 +12,36 @@ apiVersion: v1
 kind: Pod
 metadata:
   name: ${TEST_POD_NAME}
+  labels:
+    app: scheduler-healthcheck-test-pod
 spec:
   containers:
   - name: pause
     image: ${TEST_POD_IMAGE}
 endOfPodDef
 
-alias kubectl="timeout -t 30 kubectl --namespace \$TEST_POD_NAMESPACE"
+alias kubectl="timeout -t 30 kubectl --namespace \${TEST_POD_NAMESPACE}"
+function create-test-pod {
+  kubectl create -f /tmp/pod.yaml
+}
+function get-test-pod {
+  kubectl get pod ${TEST_POD_NAME} "$@"
+}
+function delete-test-pod {
+  kubectl delete pod ${TEST_POD_NAME} --grace-period=0 "$@"
+}
 
-kubectl delete pod $TEST_POD_NAME --grace-period=0 || true
+trap delete-test-pod EXIT # cleanup before exit
+
+delete-test-pod || true
 sleep 1
-kubectl delete pod $TEST_POD_NAME --grace-period=0 --force || true
-kubectl create -f /tmp/pod.yaml
-until [ "$(kubectl get pod ${TEST_POD_NAME} -o jsonpath='{.status.conditions[?(@.type == "PodScheduled")].status}')" == "True" ]; do
-  kubectl get pod ${TEST_POD_NAME}
-  kubectl get pod ${TEST_POD_NAME} -o jsonpath='{.status.conditions[?(@.type == "PodScheduled")].status}'
+delete-test-pod --force || true
+create-test-pod
+until [ "$(get-test-pod -o jsonpath='{.status.conditions[?(@.type == "PodScheduled")].status}')" == "True" ]; do
+  get-test-pod
+  get-test-pod -o jsonpath='{.status.conditions[?(@.type == "PodScheduled")].status}'
   sleep 1
 done
-kubectl delete pod $TEST_POD_NAME --grace-period=0 || true
+delete-test-pod || true
 sleep 1
-kubectl delete pod $TEST_POD_NAME --grace-period=0 --force || true
+delete-test-pod --force || true
