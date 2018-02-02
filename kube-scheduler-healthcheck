@@ -1,32 +1,62 @@
-#!/bin/sh
+#!/bin/bash
+[[ "$TRACE" ]] && set -x
 set -eu
+
 TEST_POD_NAMESPACE="${TEST_POD_NAMESPACE:-kube-system}"
 TEST_POD_IMAGE="${TEST_POD_IMAGE:-gcr.io/google_containers/pause:3.0}"
 TEST_POD_NAME_POSTFIX="${TEST_POD_NAME_POSTFIX-'pod'}"
 TEST_POD_NAME="scheduler-healthcheck-${TEST_POD_NAME_POSTFIX}"
 
+echo "gathering controller pod details"
+kubectl get pods --field-selector="status.podIP==$(hostname -i)" -o json > /tmp/me.json
+mypodname=$(jq '.items[0].metadata.name' /tmp/me.json)
+mypoduid=$(jq '.items[0].metadata.uid' /tmp/me.json)
+
+echo "writing test pod manifest"
 cat > /tmp/pod.yaml <<endOfPodDef
 apiVersion: v1
 kind: Pod
 metadata:
   name: ${TEST_POD_NAME}
+  labels:
+    app: scheduler-healthcheck-test-pod
+  ownerReferences:
+  - apiVersion: v1
+    controller: true
+    kind: Pod
+    name: ${mypodname}
+    uid: ${mypoduid}
 spec:
   containers:
   - name: pause
     image: ${TEST_POD_IMAGE}
 endOfPodDef
 
-alias kubectl="timeout -t 30 kubectl --namespace \$TEST_POD_NAMESPACE"
+alias kubectl="timeout -t 30 kubectl --namespace \${TEST_POD_NAMESPACE}"
+function create-test-pod {
+  kubectl create -f /tmp/pod.yaml
+}
+function get-test-pod {
+  if kubectl get pod ${TEST_POD_NAME} "$@" 2>/dev/null; then
+    echo "found test pod"
+  fi
+}
+function delete-test-pod {
+  kubectl delete pod ${TEST_POD_NAME} --grace-period=0 "$@" 2>/dev/null
+}
+function delete-test-pod-force {
+  delete-test-pod --force "$@"
+}
 
-kubectl delete pod $TEST_POD_NAME --grace-period=0 || true
-sleep 1
-kubectl delete pod $TEST_POD_NAME --grace-period=0 --force || true
-kubectl create -f /tmp/pod.yaml
-until [ "$(kubectl get pod ${TEST_POD_NAME} -o jsonpath='{.status.conditions[?(@.type == "PodScheduled")].status}')" == "True" ]; do
-  kubectl get pod ${TEST_POD_NAME}
-  kubectl get pod ${TEST_POD_NAME} -o jsonpath='{.status.conditions[?(@.type == "PodScheduled")].status}'
+echo "clearing old state"
+get-test-pod && delete-test-pod-force || true
+echo "creating test pod"
+create-test-pod
+until [ "$(get-test-pod -o jsonpath='{.status.conditions[?(@.type == "PodScheduled")].status}')" == "True" ]; do
+  echo "looking for test pod"
+  get-test-pod
+  get-test-pod -o jsonpath='{.status.conditions[?(@.type == "PodScheduled")].status}'
   sleep 1
 done
-kubectl delete pod $TEST_POD_NAME --grace-period=0 || true
-sleep 1
-kubectl delete pod $TEST_POD_NAME --grace-period=0 --force || true
+echo "found scheduled test pod, cleaning up"
+get-test-pod && delete-test-pod-force || true
