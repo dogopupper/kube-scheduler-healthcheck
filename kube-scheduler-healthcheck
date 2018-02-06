@@ -3,7 +3,7 @@ set -eu
 shopt -s expand_aliases
 
 TEST_POD_NAMESPACE="${TEST_POD_NAMESPACE:-kube-system}"
-TEST_POD_IMAGE="${TEST_POD_IMAGE:-gcr.io/google_containers/pause:3.0}"
+TEST_POD_IMAGE="${TEST_POD_IMAGE:-gcr.io/google_containers/pause:3.1}"
 TEST_POD_NAME_POSTFIX="${TEST_POD_NAME_POSTFIX-'pod'}"
 TEST_POD_NAME="scheduler-healthcheck-${TEST_POD_NAME_POSTFIX}"
 
