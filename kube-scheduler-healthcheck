@@ -1,11 +1,6 @@
 #!/bin/bash
-<<<<<<< HEAD
-set -eu
-shopt -s expand_aliases
-=======
 [[ "$TRACE" ]] && set -x
 set -eu
->>>>>>> c591486569f3d128ca09775107187273df85b39d
 
 TEST_POD_NAMESPACE="${TEST_POD_NAMESPACE:-kube-system}"
 TEST_POD_IMAGE="${TEST_POD_IMAGE:-gcr.io/google_containers/pause:3.1}"
@@ -25,15 +20,12 @@ metadata:
   name: ${TEST_POD_NAME}
   labels:
     app: scheduler-healthcheck-test-pod
-<<<<<<< HEAD
-=======
   ownerReferences:
   - apiVersion: v1
     controller: true
     kind: Pod
     name: ${mypodname}
     uid: ${mypoduid}
->>>>>>> c591486569f3d128ca09775107187273df85b39d
 spec:
   containers:
   - name: pause
@@ -45,21 +37,6 @@ function create-test-pod {
   kubectl create -f /tmp/pod.yaml
 }
 function get-test-pod {
-<<<<<<< HEAD
-  kubectl get pod ${TEST_POD_NAME} "$@"
-}
-function delete-test-pod {
-  kubectl delete pod ${TEST_POD_NAME} --grace-period=0 "$@"
-}
-
-trap delete-test-pod EXIT # cleanup before exit
-
-delete-test-pod || true
-sleep 1
-delete-test-pod --force || true
-create-test-pod
-until [ "$(get-test-pod -o jsonpath='{.status.conditions[?(@.type == "PodScheduled")].status}')" == "True" ]; do
-=======
   if kubectl get pod ${TEST_POD_NAME} "$@" 2>/dev/null; then
     echo "found test pod"
   fi
@@ -77,16 +54,9 @@ echo "creating test pod"
 create-test-pod
 until [ "$(get-test-pod -o jsonpath='{.status.conditions[?(@.type == "PodScheduled")].status}')" == "True" ]; do
   echo "looking for test pod"
->>>>>>> c591486569f3d128ca09775107187273df85b39d
   get-test-pod
   get-test-pod -o jsonpath='{.status.conditions[?(@.type == "PodScheduled")].status}'
   sleep 1
 done
-<<<<<<< HEAD
-delete-test-pod || true
-sleep 1
-delete-test-pod --force || true
-=======
 echo "found scheduled test pod, cleaning up"
 get-test-pod && delete-test-pod-force || true
->>>>>>> c591486569f3d128ca09775107187273df85b39d
